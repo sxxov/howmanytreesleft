@@ -1,0 +1,41 @@
+{
+  "name": "howmanytreesleft",
+  "version": "1.0.0",
+  "description": "a bot that updates on how many trees left until Team Trees hit their goal",
+  "main": "main.js",
+  "dependencies": {
+    "canvas": "^2.6.0",
+    "cheerio": "^1.0.0-rc.3",
+    "cli-progress": "^3.3.1",
+    "fs": "0.0.1-security",
+    "http": "0.0.0",
+    "https": "^1.0.0",
+    "inquirer": "^7.0.0",
+    "instagram-private-api": "^1.32.0",
+    "is-online": "^8.2.0",
+    "node-schedule": "^1.3.2",
+    "seedrandom": "^3.0.5",
+    "util": "^0.12.1",
+    "xhr2": "^0.2.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo tests are for losers"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sxxov/howmanytreesleft.git"
+  },
+  "keywords": [
+    "instagram",
+    "bot",
+    "team",
+    "trees"
+  ],
+  "author": "Sxxov",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Sxxov/howmanytreesleft/issues"
+  },
+  "homepage": "https://github.com/Sxxov/howmanytreesleft#readme"
+}
