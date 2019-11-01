@@ -1,5 +1,5 @@
 # howmanytreesleft
-(not) a bot that updates on how many trees left until Team Trees hit their goal, onto Instagram
+(not) a bot that posts updates on how many trees left until Team Trees hit their goal, onto Instagram
 
 ### bootstrap.bat
 	- launches main.js
@@ -18,7 +18,7 @@
 	hashtags for the captions
 
 ### /stuff/credentials.json (not included):
-	credentials for Instagram account, and Oxford API keys
+	credentials for Instagram account
 
 	- example for credentials.json:
 
