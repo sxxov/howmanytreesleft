@@ -9,6 +9,7 @@ const directories = {};
 let currentMilestone;
 let profile;
 let teamTreesData;
+let lastLoggedTaskInFallbackMode;
 
 directories.stuff = `${__dirname}//stuff`;
 directories.fonts = `${directories.stuff}//fonts`;
@@ -37,27 +38,40 @@ log.status = (currentTask, {
 	colour = 0,
 	progressBar,
 	maxProgress,
-	currentProgress
+	currentProgress,
+	useFallback = false
 } = {}) => {
+	let _useFallback = useFallback;
+
 	if (currentProgressBar.bar !== undefined) {
 		currentProgressBar.bar.stop();
 	}
-	console.clear();
-	process.stdout.clearLine();
-	process.stdout.cursorTo(0);
-	console.clear();
-	for (let i = 0; i < 13; i++) {
-		log.newLine();
+	try {
+		process.stdout.clearLine();
+		process.stdout.cursorTo(0);
+		console.clear();
+	} catch (e) {
+		_useFallback = true;
 	}
 	if (!silent) {
+		if (_useFallback) {
+			if (lastLoggedTaskInFallbackMode !== currentTask) {
+				console.log(`${cliPadding}${currentTask}`);
+				lastLoggedTaskInFallbackMode = currentTask;
+			}
+			return;
+		}
+		for (let i = 0; i < 13; i++) {
+			log.newLine();
+		}
 		process.stdout.write(`${cliPadding}${log._colourize(currentTask, colour)}`);
+		log.newLine();
+		log.newLine();
 	}
 	if (logging && log.lastMsg !== currentTask) {
 		log.toLog(`${currentTask}`);
 	}
 	log.lastMsg = currentTask;
-	log.newLine();
-	log.newLine();
 	// console.table({
 	// 	'logging': logging,
 	// 	'progressBar': progressBar,
@@ -165,7 +179,8 @@ log.init('getting hashtags');
 let hashtags;
 
 try {
-	hashtags = fs.readFileSync(`${directories.stuff}//hashtags.txt`, 'utf8')
+	hashtags = getFromStuff('hashtags.txt')
+		.toString()
 		.replace(/(?:\r\n|\r|\n|,)/g, '') // https://stackoverflow.com/questions/784539/how-do-i-replace-all-line-breaks-in-a-string-with-br-tags
 		.split('#')
 		.filter((hashtag) => hashtag !== '')
@@ -221,9 +236,10 @@ async function loop(force) {
 	let lastMilestone;
 	let nextMilestone;
 	const scheduleFrequency = '*/10 * * * * *';
+	const treeProgressFormat = `${cliPadding}{bar}${cliPadding}{percentage}%${cliPadding}|${cliPadding}{value}/{total} trees...`;
 
 	let treeProgress = new cliProgress.SingleBar({
-		'format': `${cliPadding}{bar}${cliPadding}{percentage}%${cliPadding}|${cliPadding}{value}/{total} trees...`
+		'format': treeProgressFormat
 	}, cliProgress.Presets.shades_classic);
 
 	teamTreesData = await getTeamTreesData();
@@ -238,20 +254,13 @@ async function loop(force) {
 	});
 
 	if (force) {
-		teamTreesData = await getTeamTreesData();
-		remainingTreeAmountTmp = teamTreesData.remainingTreeAmount;
-		remainingTreeAmount = remainingTreeAmountTmp ? remainingTreeAmountTmp : remainingTreeAmount;
-		nextMilestone = getMilestone(remainingTreeAmount);
-		currentMilestone = getMilestone(remainingTreeAmount, 'last');
-		lastMilestone = nextMilestone;
-		verifyMilestone(remainingTreeAmount);
-		await init(remainingTreeAmount);
+		await onJob(true);
 		return;
 	}
 
 	let job = schedule.scheduleJob(scheduleFrequency, onJob);
 
-	async function onJob() {
+	async function onJob(_force) {
 		teamTreesData = await getTeamTreesData();
 		remainingTreeAmountTmp = teamTreesData.remainingTreeAmount;
 
@@ -266,6 +275,10 @@ async function loop(force) {
 		// 	'remainingTreeAmount': remainingTreeAmount
 		// });
 
+		if (_force) {
+			await _init(remainingTreeAmount);
+			return;
+		}
 		verifyMilestone(remainingTreeAmount);
 
 		if (lastMilestone > nextMilestone) {
@@ -275,7 +288,7 @@ async function loop(force) {
 				'maxProgress': goal,
 				'currentProgress': goal - remainingTreeAmount
 			});
-			_init(remainingTreeAmount);
+			await _init(remainingTreeAmount);
 			return;
 		} else if (nextMilestone > lastMilestone) {
 			// apparently people refunded??
@@ -297,7 +310,10 @@ async function loop(force) {
 	}
 
 	async function _init(_remainingTreeAmount) {
-		job.cancel();
+		try {
+			job.cancel();
+		} catch (e) {//
+		}
 		currentMilestone = getMilestone(_remainingTreeAmount, 'last');
 		writeToStuff('.lastAchievedMilestone', {
 			'lastAchievedMilestone': getMilestone(_remainingTreeAmount, 'last')
@@ -305,9 +321,12 @@ async function loop(force) {
 		lastMilestone = nextMilestone;
 		await init(_remainingTreeAmount);
 		treeProgress = new cliProgress.SingleBar({
-			'format': `${cliPadding}{bar}${cliPadding}{percentage}%${cliPadding}|${cliPadding}{value}/{total} trees...`
+			'format': treeProgressFormat
 		}, cliProgress.Presets.shades_classic);
-		job.reschedule(scheduleFrequency);
+		try {
+			job.reschedule(scheduleFrequency);
+		} catch (e) {//
+		}
 	}
 
 	async function verifyMilestone(_remainingTreeAmount) {
@@ -322,26 +341,6 @@ async function loop(force) {
 	function wrongMilestone(e) {
 		log.error(new ErrorLoop.IncorrectLastAchievedMilestone(e));
 	}
-
-	// function getMilestone(currentNumber, mode) {
-	// 	const frontNumbersStr = currentNumber.toString().substring(0, 2);
-	// 	const otherNumbers = currentNumber.toString().substring(2);
-	// 	const otherNumbersZeroOrNo = otherNumbers.substring(0, 1) === '0' ? '0' : '';
-	// 	const base = Math.pow(10, Math.floor(Math.log(parseInt(otherNumbers)) / Math.log(10)));
-
-	// 	switch (mode) {
-	// 		case 'last':
-	// 			if (currentNumber.toString().length > 4) {
-	// 				return parseInt(`${frontNumbersStr}${otherNumbersZeroOrNo}${Math.ceil(otherNumbers / base) * base}`); // https://stackoverflow.com/questions/42653729/need-the-next-milestone-number-for-the-number-provided
-	// 			}
-	// 			return 10000;
-	// 		default:
-	// 			if (currentNumber.toString().length > 4) {
-	// 				return parseInt(`${frontNumbersStr}${otherNumbersZeroOrNo}${Math.floor(otherNumbers / base) * base}`); // https://stackoverflow.com/questions/42653729/need-the-next-milestone-number-for-the-number-provided
-	// 			}
-	// 			return 0;
-	// 	}
-	// }
 }
 
 function getMilestone(__remainingTreeAmount, last) {
@@ -376,19 +375,6 @@ async function testInternet() {
 }
 
 async function uploadIG(buffer) {
-	// const uploadingBarPrefix = 'uploadIG: ';
-	// const uploadingBar = new cliProgress.SingleBar({
-	// 	'format': `${cliPadding}${uploadingBarPrefix}{bar}${cliPadding}{percentage}%`,
-	// 	'stopOnComplete': true,
-	// 	'clearOnComplete': true,
-	// 	'barsize': 40 - uploadingBarPrefix.length
-	// }, cliProgress.Presets.shades_classic);
-
-	// log.status('uploadIG: uploading', {
-	// 	'progressBar': uploadingBar,
-	// 	'maxProgress': 100,
-	// 	'currentProgress': 0
-	// });
 	log.status('uploadIG: uploading');
 	try {
 		let caption = `we broke ${getNumberWithCommas(goal - currentMilestone)}!
@@ -412,10 +398,6 @@ teamtrees.org
 
 		let url = `https://www.instagram.com/p/${result.media.code}/`;
 
-		// log.status('uploadIG: uploading', {
-		// 	'progressBar': uploadingBar,
-		// 	'currentProgress': 100
-		// });
 		log.status(`uploadIG: upload function complete: ${url}`);
 		if (result.status !== 'ok') {
 			throw new ErrorUploadIG.NotOK();
@@ -449,6 +431,8 @@ async function loginIG(bypassTest) {
 		await ig.state.deserializeCookieJar(JSON.stringify(cookiesFile));
 	}
 
+	ig.state.generateDevice(username);
+
 	if (profile !== undefined) {
 		try {
 			log.status('loginIG: test: getting user feed');
@@ -470,8 +454,6 @@ async function loginIG(bypassTest) {
 	}
 	async function tryToLogin() {
 		try {
-
-			ig.state.generateDevice(username);
 			await ig.simulate.preLoginFlow();
 			profile = await ig.account.login(username, password);
 			await ig.simulate.postLoginFlow();
@@ -550,10 +532,18 @@ function writeToStuff(file, lastAchievedMilestone) {
 }
 
 function getFromStuff(file) {
+	let fileContents;
+
 	try {
-		return JSON.parse(fs.readFileSync(`${directories.stuff}//${file}`));
+		fileContents = fs.readFileSync(`${directories.stuff}//${file}`);
 	} catch (e) {
-		log.warn(`getFromFile: ${directories.stuff}//${file} doesn\'t exist!`);
+		log.warn(`getFromStuff: ${directories.stuff}//${file} doesn\'t exist!`);
+		return;
+	}
+	try {
+		return JSON.parse(fileContents);
+	} catch (e) {
+		return fileContents;
 	}
 }
 
@@ -575,8 +565,6 @@ async function getTeamTreesData() {
 	let donatorAmounts = $0('.media.pt-3 .feed-tree-count');
 	let totalRecentDonations = 0;
 	let lastDonatorIndex = 24;
-
-	console.log(diff);
 
 	// recent donators, max people = 24
 	for (let i = 0; i < 24; i++) {
