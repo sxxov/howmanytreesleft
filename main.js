@@ -275,7 +275,8 @@ async function loop(force) {
 		// 	'remainingTreeAmount': remainingTreeAmount
 		// });
 
-		if (_force) {
+		// check if the first arg === true and not other things scheduleJob passes through
+		if (_force === true) {
 			await _init(remainingTreeAmount);
 			return;
 		}
