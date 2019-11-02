@@ -434,14 +434,19 @@ teamtrees.org
 async function loginIG(bypassTest) {
 	log.status('loginIG: logging in');
 
+	if (bypassTest) {
+		await tryToLogin();
+		return;
+	}
+
 	let userFeed;
 	let firstPageItems;
 
 	profile = getFromStuff('.profile');
-
-	if (bypassTest) {
-		await tryToLogin();
-		return;
+	const cookiesFile = getFromStuff('.cookies');
+	
+	if (cookiesFile !== undefined) {
+		await ig.state.deserializeCookieJar(JSON.stringify(cookiesFile));
 	}
 
 	if (profile !== undefined) {
@@ -470,7 +475,8 @@ async function loginIG(bypassTest) {
 			await ig.simulate.preLoginFlow();
 			profile = await ig.account.login(username, password);
 			await ig.simulate.postLoginFlow();
-	
+			
+			writeToStuff('.cookies', await ig.state.serializeCookieJar());
 			writeToStuff('.profile', profile);
 			log.status(`loginIG: logged in as: ${profile.username}`);
 			return;
